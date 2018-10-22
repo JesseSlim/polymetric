@@ -64,10 +64,10 @@ class Transformed(Shape):
 
         transformed_polys = []
         for c in self.children:
-            c_poly = c.polygonize()
-            tc_poly = transformer(self.get_param, c_poly)
+            c_polys = c.polygonize()
+            tc_polys = [transformer(self.get_param, c_poly) for c_poly in c_polys]
 
-            transformed_polys.append(tc_poly)
+            transformed_polys.extend(tc_polys)
 
         return transformed_polys
 
