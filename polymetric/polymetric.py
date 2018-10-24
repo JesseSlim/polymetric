@@ -5,9 +5,11 @@ import shapely.ops
 import shapely.affinity
 import copy
 
+
 class Shape:
     DEFAULT_PARAMS = {
     }
+
     def __init__(self, children=[], name=None, **kw):
         # combine all default parameters from subclasses
         # process bottom to top (so higher classes can override params)
@@ -59,6 +61,7 @@ class Shape:
     def apply(self, cls, name="", **kw):
         return cls(children=[self], name=name, **kw)
 
+
 class Polygon(Shape):
     DEFAULT_PARAMS = {
         "shell": None,
@@ -67,6 +70,7 @@ class Polygon(Shape):
 
     def _polygonize(self):
         return shapely.geometry.Polygon(**self._params)
+
 
 class Transformed(Shape):
     DEFAULT_PARAMS = {
@@ -85,6 +89,7 @@ class Transformed(Shape):
 
         return transformed_polys
 
+
 class Scaled(Transformed):
     DEFAULT_PARAMS = {
         "scales": (1.0, 1.0),
@@ -93,10 +98,11 @@ class Scaled(Transformed):
             polygon, 
             xfact=get_param("scales")[0],
             yfact=get_param("scales")[0],
-            zfact=1.0, # we don't deal in 3D objects (yet)
+            zfact=1.0,  # we don't deal in 3D objects (yet)
             origin=get_param("origin")
             ),
     }
+
 
 class Rotated(Transformed):
     DEFAULT_PARAMS = {
@@ -110,6 +116,7 @@ class Rotated(Transformed):
         )
     }
 
+
 class Translated(Transformed):
     DEFAULT_PARAMS = {
         "offset": (0.0, 0.0),
@@ -117,9 +124,10 @@ class Translated(Transformed):
             polygon,
             xoff=get_param("offset")[0],
             yoff=get_param("offset")[1],
-            zoff=0.0, # we don't deal in 3D objects (yet)
+            zoff=0.0,  # we don't deal in 3D objects (yet)
         )
     }
+
 
 class Skewed(Transformed):
     DEFAULT_PARAMS = {
@@ -134,6 +142,7 @@ class Skewed(Transformed):
         )
     }
 
+
 class AffineTransformed(Transformed):
     DEFAULT_PARAMS = {
         "matrix": [1.0, 0.0, 0.0, 1.0, 0.0, 0.0],
@@ -143,11 +152,13 @@ class AffineTransformed(Transformed):
         )
     }
 
+
 class Positioned(Shape):
     DEFAULT_PARAMS = {
         "x": 0.0,
         "y": 0.0,
     }
+
 
 class Ellipse(Positioned):
     DEFAULT_PARAMS = {
@@ -169,12 +180,14 @@ class Ellipse(Positioned):
 
         return [polygon]
 
+
 class Circle(Ellipse):
     DEFAULT_PARAMS = {
         "r": 1.0,
         "a": lambda get_param: get_param("r"),
         "b": lambda get_param: get_param("r"),
     }
+
 
 class Rectangle(Positioned):
     DEFAULT_PARAMS = {
@@ -197,6 +210,7 @@ class Rectangle(Positioned):
         polygon = shapely.geometry.Polygon(coords)
 
         return [polygon]
+
 
 class ParametricSweep(Shape):
     DEFAULT_PARAMS = {
@@ -222,7 +236,7 @@ class ParametricSweep(Shape):
                     swept_params[sp_name] = sweep_index
                 else:
                     swept_params[sp_name] = sp_value(sweep_index)
-            
+
             combined_params = {**fixed_params, **swept_params}
             shape = ctr(**combined_params)
 
@@ -230,7 +244,7 @@ class ParametricSweep(Shape):
 
         self.children = children
         self.built = True
-    
+
     def _polygonize(self):
         children_polys = []
 
@@ -238,6 +252,7 @@ class ParametricSweep(Shape):
             children_polys += child.polygonize()
 
         return children_polys
+
 
 class Flattened(Shape):
     def _polygonize(self):
@@ -250,6 +265,7 @@ class Flattened(Shape):
 
         return [single_poly]
 
+
 class Combined(Shape):
     def _polygonize(self):
         children_polys = []
@@ -258,6 +274,7 @@ class Combined(Shape):
             children_polys += child.polygonize()
 
         return children_polys
+
 
 class BinaryOperation(Shape):
     DEFAULT_PARAMS = {
@@ -277,20 +294,24 @@ class BinaryOperation(Shape):
 
         return [poly_result]
 
+
 class Difference(BinaryOperation):
     DEFAULT_PARAMS = {
         "operation": "difference"
     }
+
 
 class Union(BinaryOperation):
     DEFAULT_PARAMS = {
         "operation": "union"
     }
 
+
 class Intersection(BinaryOperation):
     DEFAULT_PARAMS = {
         "operation": "intersection"
     }
+
 
 class SymmetricDifference(BinaryOperation):
     DEFAULT_PARAMS = {
