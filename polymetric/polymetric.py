@@ -20,7 +20,10 @@ class Shape:
         self._params.update(kw)
 
         self.name = name
-        self.children = children
+        if isinstance(children, (tuple, list)):
+            self.children = children
+        else:
+            self.children = [children]
         self.built = False
 
     def set_params(self, **kw):
@@ -48,8 +51,10 @@ class Shape:
     def is_built(self):
         return self.built
 
-    def clone(self):
-        return copy.deepcopy(self)
+    def clone(self, **kw):
+        new_instance = copy.deepcopy(self)
+        new_instance.set_params(**kw)
+        return new_instance
 
     def apply(self, cls, name="", **kw):
         return cls(children=[self], name=name, **kw)
@@ -178,14 +183,14 @@ class Rectangle(Positioned):
     }
 
     def _polygonize(self):
-        width = np.abs(self.get_param("w"))
-        height = np.abs(self.get_param("h"))
+        half_width = np.abs(self.get_param("w")) / 2.0
+        half_height = np.abs(self.get_param("h")) / 2.0
 
         center_x = self.get_param("x")
         center_y = self.get_param("y")
 
-        xs = [center_x - width, center_x - width, center_x + width, center_x + width]
-        ys = [center_y - height, center_y + height, center_y + height, center_y - height]
+        xs = [center_x - half_width, center_x - half_width, center_x + half_width, center_x + half_width]
+        ys = [center_y - half_height, center_y + half_height, center_y + half_height, center_y - half_height]
 
         coords = zip(xs, ys)
 
@@ -232,8 +237,6 @@ class ParametricSweep(Shape):
         for child in self.children:
             children_polys += child.polygonize()
 
-        # polygon = shapely.ops.cascaded_union(children_polys)
-
         return children_polys
 
 class Flattened(Shape):
@@ -247,14 +250,23 @@ class Flattened(Shape):
 
         return [single_poly]
 
+class Combined(Shape):
+    def _polygonize(self):
+        children_polys = []
+
+        for child in self.children:
+            children_polys += child.polygonize()
+
+        return children_polys
+
 class BinaryOperation(Shape):
     DEFAULT_PARAMS = {
         "operation": None
     }
 
     def _polygonize(self):
-        left = Flattened(children=[self.children[0]])
-        right = Flattened(children=[self.children[1]])
+        left = self.children[0].apply(Flattened)
+        right = self.children[1].apply(Flattened)
 
         poly_left = left.polygonize()[0]
         poly_right = right.polygonize()[0]
