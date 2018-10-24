@@ -54,6 +54,15 @@ class Shape:
     def apply(self, cls, name="", **kw):
         return cls(children=[self], name=name, **kw)
 
+class Polygon(Shape):
+    DEFAULT_PARAMS = {
+        "shell": None,
+        "holes": None,
+    }
+
+    def _polygonize(self):
+        return shapely.geometry.Polygon(**self._params)
+
 class Transformed(Shape):
     DEFAULT_PARAMS = {
         "transformer": lambda get_param, polygon: polygon,
@@ -117,6 +126,15 @@ class Skewed(Transformed):
             ys=get_param("angle")[1],
             origin=get_param("origin"),
             use_radians=True
+        )
+    }
+
+class AffineTransformed(Transformed):
+    DEFAULT_PARAMS = {
+        "matrix": [1.0, 0.0, 0.0, 1.0, 0.0, 0.0],
+        "transformer": lambda get_param, polygon: shapely.affinity.affine_transform(
+            Polygon,
+            get_param("matrix")
         )
     }
 
@@ -217,3 +235,52 @@ class ParametricSweep(Shape):
         # polygon = shapely.ops.cascaded_union(children_polys)
 
         return children_polys
+
+class Flattened(Shape):
+    def _polygonize(self):
+        children_polys = []
+
+        for child in self.children:
+            children_polys += child.polygonize()
+
+        single_poly = shapely.ops.cascaded_union(children_polys)
+
+        return [single_poly]
+
+class BinaryOperation(Shape):
+    DEFAULT_PARAMS = {
+        "operation": None
+    }
+
+    def _polygonize(self):
+        left = Flattened(children=[self.children[0]])
+        right = Flattened(children=[self.children[1]])
+
+        poly_left = left.polygonize()[0]
+        poly_right = right.polygonize()[0]
+
+        func = getattr(poly_left, self.get_param("operation"))
+
+        poly_result = func(poly_right)
+
+        return [poly_result]
+
+class Difference(BinaryOperation):
+    DEFAULT_PARAMS = {
+        "operation": "difference"
+    }
+
+class Union(BinaryOperation):
+    DEFAULT_PARAMS = {
+        "operation": "union"
+    }
+
+class Intersection(BinaryOperation):
+    DEFAULT_PARAMS = {
+        "operation": "intersection"
+    }
+
+class SymmetricDifference(BinaryOperation):
+    DEFAULT_PARAMS = {
+        "operation": "symmetric_difference"
+    }
