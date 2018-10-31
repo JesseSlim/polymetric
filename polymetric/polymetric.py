@@ -266,6 +266,22 @@ class Flattened(Shape):
         return [single_poly]
 
 
+class Expanded(Shape):
+    def _polygonize(self):
+        children_polys = []
+
+        for child in self.children:
+            child_poly = child.polygonize()
+            for cp in child_poly:
+                # expand multipolygons
+                if isinstance(cp, shapely.geometry.MultiPolygon):
+                    children_polys += list(cp.geoms)
+                else:
+                    children_polys += [cp]
+
+        return children_polys
+
+
 class Combined(Shape):
     def _polygonize(self):
         children_polys = []
