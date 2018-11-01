@@ -61,6 +61,37 @@ class Shape:
     def apply(self, cls, name="", **kw):
         return cls(children=[self], name=name, **kw)
 
+    def get_exterior_vertex_lists(self):
+        polygons = self.apply(Expanded).polygonize()
+        vertex_lists = []
+        for poly in polygons:
+            vertices = list(poly.exterior.coords)
+            vertex_lists.append(vertices)
+
+        return vertex_lists
+
+    def get_interior_vertex_lists(self):
+        polygons = self.apply(Expanded).polygonize()
+        polygons_lists = []
+        # iterate over all polygons...
+        for poly in polygons:
+            vertex_lists = []
+            # ..and then interate over all interiors
+            for interior in poly.interiors:
+                vertices = list(interior.coords)
+                vertex_lists.append(vertices)
+            polygons_lists.append(vertex_lists)
+
+        return polygons_lists
+
+    def has_interiors(self):
+        polygons = self.apply(Expanded).polygonize()
+        for poly in polygons:
+            if len(poly.interiors) > 0:
+                return True
+
+        return False
+
 
 class Polygon(Shape):
     DEFAULT_PARAMS = {
