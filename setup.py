@@ -5,7 +5,7 @@ with open("README.md", "r") as fh:
 
 setuptools.setup(
     name="polymetric",
-    version="0.2.0",
+    version="0.4.0",
     author="Jesse Slim",
     author_email="jesse.j.slim@gmail.com",
     description="Generate complex polygon structures",
