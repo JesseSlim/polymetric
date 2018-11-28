@@ -4,6 +4,7 @@ import matplotlib.pyplot as plt
 import shapely as sp
 import shapely.geometry
 
+
 def plot_polys(polys, cycle_colours=False, **kw):
     single_color = None
     for i, outer_poly in enumerate(polys):
@@ -31,7 +32,8 @@ def plot_polys(polys, cycle_colours=False, **kw):
             for interior in poly.interiors:
                 xs, ys = interior.xy
                 plt.plot(xs, ys, **plot_params)
-            
+
+
 def plot_shapes(shapes, *more_shapes, **kw):
     if not isinstance(shapes, (list, tuple)):
         shapes = [shapes]
@@ -39,12 +41,15 @@ def plot_shapes(shapes, *more_shapes, **kw):
     shapes += more_shapes
     for s in shapes:
         plot_polys(s.polygonize(), **kw)
-            
+
+
 def show_polys():
     plt.gca().set_aspect('equal')
     plt.show()
     
-def inspect_shapes(shapes, *more_shapes, **kw):
-    plt.figure()
+
+def inspect_shapes(shapes, *more_shapes, figure=None, **kw):
+    if figure is None:
+        plt.figure()
     plot_shapes(shapes, *more_shapes, **kw)
     show_polys()

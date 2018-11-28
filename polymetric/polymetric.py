@@ -4,6 +4,7 @@ import shapely.geometry
 import shapely.ops
 import shapely.affinity
 import copy
+from enum import Enum
 
 
 class Shape:
@@ -92,6 +93,15 @@ class Shape:
 
         return False
 
+    def get_bounding_box(self):
+        # this is not very efficient as it does the whole polygonization procedure
+        # but we're not caring about performance right now
+        # (caching polygonizations would be the obvious solution,
+        # but not trivial to get right as children might change for example)
+        own_poly = self.apply(Flattened).polygonize()[0]
+
+        return own_poly.bounds
+
 
 class Polygon(Shape):
     DEFAULT_PARAMS = {
@@ -126,12 +136,12 @@ class Scaled(Transformed):
         "scales": (1.0, 1.0),
         "origin": (0.0, 0.0),
         "transformer": lambda get_param, polygon: shapely.affinity.scale(
-            polygon, 
+            polygon,
             xfact=get_param("scales")[0],
-            yfact=get_param("scales")[0],
+            yfact=get_param("scales")[1],
             zfact=1.0,  # we don't deal in 3D objects (yet)
             origin=get_param("origin")
-            ),
+        ),
     }
 
 
@@ -151,10 +161,12 @@ class Rotated(Transformed):
 class Translated(Transformed):
     DEFAULT_PARAMS = {
         "offset": (0.0, 0.0),
+        "dx": lambda get_param: get_param("offset")[0],
+        "dy": lambda get_param: get_param("offset")[1],
         "transformer": lambda get_param, polygon: shapely.affinity.translate(
             polygon,
-            xoff=get_param("offset")[0],
-            yoff=get_param("offset")[1],
+            xoff=get_param("dx"),
+            yoff=get_param("dy"),
             zoff=0.0,  # we don't deal in 3D objects (yet)
         )
     }
@@ -191,6 +203,55 @@ class Positioned(Shape):
     }
 
 
+class Anchors(Enum):
+    CENTER = 0
+    LOWER_LEFT = 1
+    LOWER_RIGHT = 2
+    UPPER_RIGHT = 3
+    UPPER_LEFT = 4
+
+
+class AnchorPositioned(Positioned):
+    DEFAULT_PARAMS = {
+        "anchor": Anchors.CENTER,
+    }
+
+    def _polygonize(self):
+        # determine bounding box
+        bounding_box = Flattened(self.children).get_bounding_box()
+
+        anchor = self.get_param("anchor")
+
+        # determine offsets to position anchor at requested position
+        dx = self.get_param("x")
+        dy = self.get_param("y")
+
+        if anchor == Anchors.CENTER:
+            dx -= (bounding_box[2] + bounding_box[0]) / 2.0
+            dy -= (bounding_box[3] + bounding_box[1]) / 2.0
+        elif anchor == Anchors.LOWER_LEFT:
+            dx -= bounding_box[0]
+            dy -= bounding_box[1]
+        elif anchor == Anchors.LOWER_RIGHT:
+            dx -= bounding_box[2]
+            dy -= bounding_box[1]
+        elif anchor == Anchors.UPPER_RIGHT:
+            dx -= bounding_box[2]
+            dy -= bounding_box[3]
+        elif anchor == Anchors.UPPER_LEFT:
+            dx -= bounding_box[0]
+            dy -= bounding_box[3]
+        else:
+            raise ValueError("Invalid anchor selected: " + anchor)
+
+        # do translation on a fresh copy of children
+        # to preserve interior boundaries between the children
+        # not the most efficient but I don't care about that right now
+        translated_children = Translated(self.children, dx=dx, dy=dy)
+
+        return translated_children.polygonize()
+
+
 class Ellipse(Positioned):
     DEFAULT_PARAMS = {
         "a": 1.0,
@@ -200,7 +261,7 @@ class Ellipse(Positioned):
     }
 
     def _polygonize(self):
-        angle_list = np.linspace(0, 2*np.pi, self.get_param("n_sectors"), endpoint=False) + self.get_param("alpha_0")
+        angle_list = np.linspace(0, 2.0 * np.pi, self.get_param("n_sectors"), endpoint=False) + self.get_param("alpha_0")
 
         xs = self.get_param("x") + self.get_param("a") * np.cos(angle_list)
         ys = self.get_param("y") + self.get_param("b") * np.sin(angle_list)
