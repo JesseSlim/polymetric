@@ -40,6 +40,12 @@ class Shape:
         else:
             return p
 
+    def get_params(self, *names, do_conversion=True):
+        ps = []
+        for pname in names:
+            ps.append(self.get_param(pname, do_conversion=do_conversion))
+        return ps
+
     def polygonize(self, rebuild=False):
         if not self.built or rebuild:
             self.build()
@@ -425,3 +431,28 @@ class SymmetricDifference(BinaryOperation):
     DEFAULT_PARAMS = {
         "operation": "symmetric_difference"
     }
+
+
+class BufferedShape(Shape):
+    DEFAULT_PARAMS = {
+        "d": 0.0,
+        "resolution": 16,
+        "cap_style": shapely.geometry.CAP_STYLE.round,
+        "join_style": shapely.geometry.JOIN_STYLE.round,
+        "mitre_limit": 5.0
+    }
+
+    def _polygonize(self):
+        own_poly = Flattened(self.children).polygonize()[0]
+
+        d, resolution, cap_style, join_style, mitre_limit = self.get_params("d", "resolution", "cap_style", "join_style", "mitre_limit")
+
+        buffered_poly = own_poly.buffer(
+            distance=d,
+            resolution=resolution,
+            cap_style=cap_style,
+            join_style=join_style,
+            mitre_limit=mitre_limit
+        )
+
+        return [buffered_poly]
