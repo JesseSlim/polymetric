@@ -460,13 +460,63 @@ class BufferedShape(Shape):
 
 class PartitionedByLine(Shape):
     DEFAULT_PARAMS = {
-        "partition_origin": (0.0, 0.0),
-        "partition_direction": (1.0, 0.0)
+        "origin": (0.0, 0.0),
+        "direction": (1.0, 0.0)
     }
 
     def _polygonize(self):
-        bounding_box = np.array(self.get_bounding_box())
+        origin = np.array(self.get_param("origin"))
+        direction = np.array(self.get_param("direction"))
+        direction /= np.linalg.norm(direction)
 
-        box_diagonal = np.sqrt(np.diff(bounding_box[::2])**2 + np.diff(bounding_box[1::2])**2)
+        bounding_box = np.array(Flattened(self.children).get_bounding_box())
+        bbox_rect = shapely.geometry.box(*bounding_box)
+        if not bbox_rect.intersects(shapely.geometry.Point(origin)):
+            raise ValueError("origin must be inside the bounding box of the shape to be partitioned")
+
+        box_diagonal = np.sqrt(np.diff(bounding_box[::2])**2 + np.diff(bounding_box[1::2])**2)[0]
+
+        pos_partition_end = origin + box_diagonal*direction
+        neg_partition_end = origin - box_diagonal*direction
+
+        part_line = shapely.geometry.LineString([neg_partition_end, pos_partition_end])
+
+        bbox_coords = list(bbox_rect.exterior.coords)
+        bbox_edges = np.array(list(zip(bbox_coords, bbox_coords[1:])))
+
+        edge_intersects = []
+        for edge_coords in bbox_edges:
+            edge_line = shapely.geometry.LineString(edge_coords)
+            
+            edge_intersects.append(edge_line.intersection(part_line))
+            
+        intersecting_edges = [not isect.is_empty for isect in edge_intersects]
+        if np.sum(intersecting_edges) != 2:
+            raise ValueError("partitioning line must intersect two edges of the bounding box")
+        first_intersecting_edge = np.argmax(intersecting_edges)
+        last_intersecting_edge = len(intersecting_edges) - 1 - np.argmax(intersecting_edges[::-1])
+
+        first_intersection_point = np.array([edge_intersects[first_intersecting_edge].coords[0]])
+        last_intersection_point = np.array([edge_intersects[last_intersecting_edge].coords[0]])
+
+        intermediate_vertices = bbox_edges[first_intersecting_edge:last_intersecting_edge,1,:]
+        partitioning_poly_vertices = np.vstack((first_intersection_point, intermediate_vertices, last_intersection_point))
+
+        partitioning_poly = shapely.geometry.Polygon(partitioning_poly_vertices)
+
+        partitioning_funcs = [lambda poly_in: poly_in.intersection(partitioning_poly), lambda poly_in: poly_in.difference(partitioning_poly)]
+
+        partitioned_polys = []
+
+        c_polys = []
+        [c_polys.extend(c.polygonize()) for c in self.children]
+
+        for c_poly in c_polys:
+            for pf in partitioning_funcs:
+                partitioned_poly = pf(c_poly)
+                if not partitioned_poly.is_empty:
+                    partitioned_polys.append(partitioned_poly)
+
+        return partitioned_polys
 
 
