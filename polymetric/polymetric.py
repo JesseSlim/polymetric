@@ -116,7 +116,7 @@ class Polygon(Shape):
     }
 
     def _polygonize(self):
-        return shapely.geometry.Polygon(**self._params)
+        return [shapely.geometry.Polygon(**self._params)]
 
 
 class Transformed(Shape):
@@ -272,7 +272,7 @@ class Ellipse(Positioned):
         xs = self.get_param("x") + self.get_param("a") * np.cos(angle_list)
         ys = self.get_param("y") + self.get_param("b") * np.sin(angle_list)
 
-        coords = zip(xs, ys)
+        coords = list(zip(xs, ys))
 
         polygon = shapely.geometry.Polygon(coords)
 
@@ -303,7 +303,7 @@ class Rectangle(Positioned):
         xs = [center_x - half_width, center_x - half_width, center_x + half_width, center_x + half_width]
         ys = [center_y - half_height, center_y + half_height, center_y + half_height, center_y - half_height]
 
-        coords = zip(xs, ys)
+        coords = list(zip(xs, ys))
 
         polygon = shapely.geometry.Polygon(coords)
 
@@ -456,3 +456,17 @@ class BufferedShape(Shape):
         )
 
         return [buffered_poly]
+
+
+class PartitionedByLine(Shape):
+    DEFAULT_PARAMS = {
+        "partition_origin": (0.0, 0.0),
+        "partition_direction": (1.0, 0.0)
+    }
+
+    def _polygonize(self):
+        bounding_box = np.array(self.get_bounding_box())
+
+        box_diagonal = np.sqrt(np.diff(bounding_box[::2])**2 + np.diff(bounding_box[1::2])**2)
+
+
