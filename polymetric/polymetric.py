@@ -1,15 +1,18 @@
+# -*- coding: utf-8 -*-
+
+import copy
+
+from enum import Enum
 import numpy as np
+
 import shapely
 import shapely.geometry
 import shapely.ops
 import shapely.affinity
-import copy
-from enum import Enum
 
 
 class Shape:
-    DEFAULT_PARAMS = {
-    }
+    DEFAULT_PARAMS = {}
 
     def __init__(self, children=[], name=None, **kw):
         # combine all default parameters from subclasses
@@ -85,7 +88,7 @@ class Shape:
     def has_interiors(self):
         polygons = self.apply(Expanded).polygonize()
         for poly in polygons:
-            if len(poly.interioreriors) > 0:
+            if len(poly.interiors) > 0:
                 return True
         return False
 
