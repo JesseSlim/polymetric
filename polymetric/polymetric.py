@@ -1,10 +1,10 @@
 # -*- coding: utf-8 -*-
 
+from collections.abc import Iterable
 import copy
-
 from enum import Enum
-import numpy as np
 
+import numpy as np
 import shapely
 import shapely.geometry
 import shapely.ops
@@ -26,10 +26,7 @@ class Shape:
         self._params.update(kw)
 
         self.name = name
-        if isinstance(children, (tuple, list)):
-            self.children = children
-        else:
-            self.children = [children]
+        self.children = children if isinstance(children, Iterable) else [children]
         self.built = False
 
     def set_params(self, **kw):
@@ -465,13 +462,14 @@ class PartitionedByLine(Shape):
         bounding_box = np.array(Flattened(self.children).get_bounding_box())
         bbox_rect = shapely.geometry.box(*bounding_box)
         if not bbox_rect.intersects(shapely.geometry.Point(origin)):
-            raise ValueError(
-                "origin must be inside the bounding box of the shape to be partitioned")
+            raise ValueError("origin must be inside the bounding box "
+                "of the shape to be partitioned.")
 
-        # draw a line that is guaranteed to be long enough to fully cut through the bounding box
+        # draw a line that is guaranteed to be long enough
+        # to fully cut through the bounding box
         # by making it twice as long as the box diagonal
-        box_diagonal = np.sqrt(
-            np.diff(bounding_box[::2])**2 + np.diff(bounding_box[1::2])**2)[0]
+        box_diagonal = np.hypot(np.diff(bounding_box[::2]),
+                                np.diff(bounding_box[1::2]))[0]
 
         pos_partition_end = origin + box_diagonal*direction
         neg_partition_end = origin - box_diagonal*direction
@@ -487,55 +485,78 @@ class PartitionedByLine(Shape):
         edge_intersects = []
         for edge_coords in bbox_edges:
             edge_line = shapely.geometry.LineString(edge_coords)
-
             edge_intersects.append(edge_line.intersection(part_line))
 
         # extract which edges are intersected
-        intersecting_edges = [not isect.is_empty for isect in edge_intersects]
+        intersecting_edges = np.array(
+            [not isect.is_empty for isect in edge_intersects]
+        )
 
-        # find out if we have any intersection points that coincide with two edges in the same point
-        # i.e. intersections exactly at the corner of the bounding box
-        edge_intersect_coords = np.array([ei.coords[0] if has_ei else [np.nan, np.nan] for has_ei, ei in zip(intersecting_edges, edge_intersects)])
+        # find out if we have any intersection points that coincide
+        # with two edges in the same point i.e. intersections exactly at
+        # the corner of the bounding box
+        edge_intersect_coords = np.array(
+            [ei.coords[0] if has_ei else [np.nan, np.nan]
+             for has_ei, ei in zip(intersecting_edges, edge_intersects)]
+        )
+
+        _edge_intersects_coords = np.roll(edge_intersect_coords, -1, axis=0)
         ei_dists = np.linalg.norm(
-            edge_intersect_coords - np.roll(edge_intersect_coords, -1, axis=0), axis=1)
+            edge_intersect_coords - _edge_intersects_coords,
+            axis=1,
+        )
+
         ei_coincides = np.isclose(ei_dists, 0)
 
-        if (np.sum(intersecting_edges) - np.sum(ei_coincides)) != 2:
+        if intersecting_edges.sum() - ei_coincides.sum() != 2:
             raise ValueError(
                 "partitioning line must intersect the exterior of the bounding box")
 
         first_intersecting_edge = np.argmax(intersecting_edges)
-        # check if this intersection is shared with the following edge, if so take that edge as the starting edge
+        # check if this intersection is shared with the following edge,
+        # if so take that edge as the starting edge
         if ei_coincides[first_intersecting_edge]:
             first_intersecting_edge += 1
-        first_intersection_point = np.array(
-            [edge_intersect_coords[first_intersecting_edge]])
 
-        last_intersecting_edge = len(
-            intersecting_edges) - 1 - np.argmax(intersecting_edges[::-1])
-        # check if this intersection is shared with the previous edge, if so take that edge as the final edge
+        first_intersection_point = np.array(
+            [edge_intersect_coords[first_intersecting_edge]]
+        )
+
+        last_intersecting_edge = (
+            len(intersecting_edges) - 1 - np.argmax(intersecting_edges[::-1])
+        )
+        # check if this intersection is shared with the previous edge, if so
+        # take that edge as the final edge
         if ei_coincides[last_intersecting_edge-1]:
             last_intersecting_edge -= 1
         last_intersection_point = np.array(
             [edge_intersect_coords[last_intersecting_edge]])
 
-        # construct a list of intermediate vertices between the edge intersections, along the bounding box
+        # construct a list of intermediate vertices between the edge
+        # intersections, along the bounding box
         intermediate_vertices = bbox_edges[first_intersecting_edge:last_intersecting_edge, 1, :]
         partitioning_poly_vertices = np.vstack(
-            (first_intersection_point, intermediate_vertices, last_intersection_point))
+            (first_intersection_point,
+             intermediate_vertices,
+             last_intersection_point)
+        )
 
         # construct a polygon that can be used for partitioning
-        # i.e. partition the shape in stuff inside this polygon and stuff outside this polygon
+        # i.e. partition the shape in stuff inside this polygon and
+        # stuff outside this polygon
         partitioning_poly = shapely.geometry.Polygon(
             partitioning_poly_vertices)
 
-        partitioning_funcs = [lambda poly_in: poly_in.intersection(
-            partitioning_poly), lambda poly_in: poly_in.difference(partitioning_poly)]
+        partitioning_funcs = [
+            lambda poly_in: poly_in.intersection(partitioning_poly),
+            lambda poly_in: poly_in.difference(partitioning_poly)
+        ]
 
         partitioned_polys = []
 
         c_polys = []
-        [c_polys.extend(c.polygonize()) for c in self.children]
+        for c in self.children:
+            c_polys += c.polygonize()
 
         for c_poly in c_polys:
             for pf in partitioning_funcs:
