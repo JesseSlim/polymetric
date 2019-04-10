@@ -396,17 +396,19 @@ class BinaryOperation(Shape):
     }
 
     def _polygonize(self):
-        left = self.children[0].apply(Flattened)
+        left = self.children[0]  # we don't want to flatten the left side to preserve its interior boundaries
         right = self.children[1].apply(Flattened)
 
-        poly_left = left.polygonize()[0]
+        polys_left = left.polygonize()
         poly_right = right.polygonize()[0]
 
-        func = getattr(poly_left, self.get_param("operation"))
+        result_polys = []
 
-        poly_result = func(poly_right)
+        for poly_left in polys_left:
+            func = getattr(poly_left, self.get_param("operation"))
+            result_polys.append(func(poly_right))
 
-        return [poly_result]
+        return result_polys
 
 
 class Difference(BinaryOperation):
