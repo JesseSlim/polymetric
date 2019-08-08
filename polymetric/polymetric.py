@@ -3,6 +3,7 @@ import shapely
 import shapely.geometry
 import shapely.ops
 import shapely.affinity
+import shapely.wkt
 import copy
 from enum import Enum
 
@@ -45,6 +46,14 @@ class Shape:
         for pname in names:
             ps.append(self.get_param(pname, do_conversion=do_conversion))
         return ps
+
+    def get_all_params(self, do_conversion=True):
+        result_params = {}
+
+        for k in self._params:
+            result_params[k] = self.get_param(k, do_conversion=True)
+
+        return result_params
 
     def polygonize(self, rebuild=False):
         if not self.built or rebuild:
@@ -116,7 +125,7 @@ class Polygon(Shape):
     }
 
     def _polygonize(self):
-        return [shapely.geometry.Polygon(**self._params)]
+        return [shapely.geometry.Polygon(**self.get_all_params())]
 
 
 class Transformed(Shape):
@@ -479,11 +488,11 @@ class PartitionedByLine(Shape):
             raise ValueError("origin must be inside the bounding box of the shape to be partitioned")
 
         # draw a line that is guaranteed to be long enough to fully cut through the bounding box
-        # by making it twice as long as the box diagonal
+        # by making it four times as long as the box diagonal
         box_diagonal = np.sqrt(np.diff(bounding_box[::2])**2 + np.diff(bounding_box[1::2])**2)[0]
 
-        pos_partition_end = origin + box_diagonal*direction
-        neg_partition_end = origin - box_diagonal*direction
+        pos_partition_end = origin + box_diagonal*direction*2
+        neg_partition_end = origin - box_diagonal*direction*2
 
         part_line = shapely.geometry.LineString([neg_partition_end, pos_partition_end])
 
@@ -546,3 +555,22 @@ class PartitionedByLine(Shape):
         return partitioned_polys
 
 
+class CoordinatesRounded(Shape):
+    DEFAULT_PARAMS = {
+        "rounding_precision": 1
+    }
+
+    def _polygonize(self):
+        children_polys = []
+
+        for child in self.children:
+            cps = child.polygonize()
+            cps = [
+                shapely.wkt.loads(
+                    shapely.wkt.dumps(p, rounding_precision=self.get_param("rounding_precision"))
+                ) 
+                for p in cps
+            ]
+            children_polys += cps
+
+        return children_polys

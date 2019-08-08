@@ -43,13 +43,16 @@ def plot_shapes(shapes, *more_shapes, **kw):
         plot_polys(s.polygonize(), **kw)
 
 
-def show_polys():
+def show_polys(show=True):
     plt.gca().set_aspect('equal')
-    plt.show()
-    
+    if show:
+        plt.show()
 
-def inspect_shapes(shapes, *more_shapes, figure=None, **kw):
+
+def inspect_shapes(shapes, *more_shapes, figure=None, show=True, **kw):
     if figure is None:
         plt.figure()
     plot_shapes(shapes, *more_shapes, **kw)
-    show_polys()
+    show_polys(show=show)
+
+
