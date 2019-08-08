@@ -1,16 +1,19 @@
+# -*- coding: utf-8 -*-
+
+from collections.abc import Iterable
+import copy
+from enum import Enum
+
 import numpy as np
 import shapely
 import shapely.geometry
 import shapely.ops
 import shapely.affinity
 import shapely.wkt
-import copy
-from enum import Enum
 
 
 class Shape:
-    DEFAULT_PARAMS = {
-    }
+    DEFAULT_PARAMS = {}
 
     def __init__(self, children=[], name=None, **kw):
         # combine all default parameters from subclasses
@@ -24,10 +27,7 @@ class Shape:
         self._params.update(kw)
 
         self.name = name
-        if isinstance(children, (tuple, list)):
-            self.children = children
-        else:
-            self.children = [children]
+        self.children = children if isinstance(children, Iterable) else [children]
         self.built = False
 
     def set_params(self, **kw):
@@ -36,16 +36,10 @@ class Shape:
 
     def get_param(self, name, do_conversion=True):
         p = self._params[name]
-        if do_conversion and callable(p):
-            return p(self.get_param)
-        else:
-            return p
+        return p(self.get_param) if do_conversion and callable(p) else p
 
     def get_params(self, *names, do_conversion=True):
-        ps = []
-        for pname in names:
-            ps.append(self.get_param(pname, do_conversion=do_conversion))
-        return ps
+        return [self.get_param(pname, do_conversion) for pname in names]
 
     def get_all_params(self, do_conversion=True):
         result_params = {}
@@ -61,7 +55,8 @@ class Shape:
         return self._polygonize()
 
     def _polygonize(self):
-        raise NotImplementedError("Shapes must override the polygonize-method")
+        raise NotImplementedError(
+            "Shapes must override the polygonize-method.")
 
     def build(self):
         self.built = True
@@ -79,11 +74,7 @@ class Shape:
 
     def get_exterior_vertex_lists(self):
         polygons = self.apply(Expanded).polygonize()
-        vertex_lists = []
-        for poly in polygons:
-            vertices = list(poly.exterior.coords)
-            vertex_lists.append(vertices)
-
+        vertex_lists = [list(poly.exterior.coords) for poly in polygons]
         return vertex_lists
 
     def get_interior_vertex_lists(self):
@@ -105,7 +96,6 @@ class Shape:
         for poly in polygons:
             if len(poly.interiors) > 0:
                 return True
-
         return False
 
     def get_bounding_box(self):
@@ -139,9 +129,9 @@ class Transformed(Shape):
         transformed_polys = []
         for c in self.children:
             c_polys = c.polygonize()
-            tc_polys = [transformer(self.get_param, c_poly) for c_poly in c_polys]
-
-            transformed_polys.extend(tc_polys)
+            tc_polys = [transformer(self.get_param, c_poly)
+                        for c_poly in c_polys]
+            transformed_polys += tc_polys
 
         return transformed_polys
 
@@ -276,15 +266,13 @@ class Ellipse(Positioned):
     }
 
     def _polygonize(self):
-        angle_list = np.linspace(0, 2.0 * np.pi, self.get_param("n_sectors"), endpoint=False) + self.get_param("alpha_0")
-
+        n = self.get_param("n_sectors")
+        alpha_0 = self.get_param("alpha_0")
+        angle_list = alpha_0 + np.linspace(0, 2.0 * np.pi, n, endpoint=False)
         xs = self.get_param("x") + self.get_param("a") * np.cos(angle_list)
         ys = self.get_param("y") + self.get_param("b") * np.sin(angle_list)
-
         coords = list(zip(xs, ys))
-
         polygon = shapely.geometry.Polygon(coords)
-
         return [polygon]
 
 
@@ -309,8 +297,10 @@ class Rectangle(Positioned):
         center_x = self.get_param("x")
         center_y = self.get_param("y")
 
-        xs = [center_x - half_width, center_x - half_width, center_x + half_width, center_x + half_width]
-        ys = [center_y - half_height, center_y + half_height, center_y + half_height, center_y - half_height]
+        xs = [center_x - half_width, center_x - half_width,
+              center_x + half_width, center_x + half_width]
+        ys = [center_y - half_height, center_y + half_height,
+              center_y + half_height, center_y - half_height]
 
         coords = list(zip(xs, ys))
 
@@ -335,18 +325,15 @@ class ParametricSweep(Shape):
 
         children = []
 
-        for i in range(len(sweep_over)):
-            sweep_index = sweep_over[i]
+        for sweep_index in sweep_over:
             swept_params = {}
             for sp_name, sp_value in sweep_params.items():
                 if sp_value is True:
                     swept_params[sp_name] = sweep_index
                 else:
                     swept_params[sp_name] = sp_value(sweep_index)
-
             combined_params = {**fixed_params, **swept_params}
             shape = ctr(**combined_params)
-
             children.append(shape)
 
         self.children = children
@@ -456,7 +443,8 @@ class BufferedShape(Shape):
     def _polygonize(self):
         own_poly = Flattened(self.children).polygonize()[0]
 
-        d, resolution, cap_style, join_style, mitre_limit = self.get_params("d", "resolution", "cap_style", "join_style", "mitre_limit")
+        d, resolution, cap_style, join_style, mitre_limit = self.get_params(
+            "d", "resolution", "cap_style", "join_style", "mitre_limit")
 
         buffered_poly = own_poly.buffer(
             distance=d,
@@ -485,16 +473,20 @@ class PartitionedByLine(Shape):
         bounding_box = np.array(Flattened(self.children).get_bounding_box())
         bbox_rect = shapely.geometry.box(*bounding_box)
         if not bbox_rect.intersects(shapely.geometry.Point(origin)):
-            raise ValueError("origin must be inside the bounding box of the shape to be partitioned")
+            raise ValueError("origin must be inside the bounding box "
+                "of the shape to be partitioned.")
 
-        # draw a line that is guaranteed to be long enough to fully cut through the bounding box
+        # draw a line that is guaranteed to be long enough
+        # to fully cut through the bounding box
         # by making it four times as long as the box diagonal
-        box_diagonal = np.sqrt(np.diff(bounding_box[::2])**2 + np.diff(bounding_box[1::2])**2)[0]
+        box_diagonal = np.hypot(np.diff(bounding_box[::2]),
+                                np.diff(bounding_box[1::2]))[0]
 
         pos_partition_end = origin + box_diagonal*direction*2
         neg_partition_end = origin - box_diagonal*direction*2
 
-        part_line = shapely.geometry.LineString([neg_partition_end, pos_partition_end])
+        part_line = shapely.geometry.LineString(
+            [neg_partition_end, pos_partition_end])
 
         # construct a list of edges of the bounding box
         bbox_coords = list(bbox_rect.exterior.coords)
@@ -504,47 +496,78 @@ class PartitionedByLine(Shape):
         edge_intersects = []
         for edge_coords in bbox_edges:
             edge_line = shapely.geometry.LineString(edge_coords)
-            
             edge_intersects.append(edge_line.intersection(part_line))
-            
-        # extract which edges are intersected
-        intersecting_edges = [not isect.is_empty for isect in edge_intersects]
 
-        # find out if we have any intersection points that coincide with two edges in the same point
-        # i.e. intersections exactly at the corner of the bounding box
-        edge_intersect_coords = np.array([ei.coords[0] if has_ei else [np.nan, np.nan] for has_ei, ei in zip(intersecting_edges,edge_intersects)])
-        ei_dists = np.linalg.norm(edge_intersect_coords - np.roll(edge_intersect_coords, -1, axis=0), axis=1)
+        # extract which edges are intersected
+        intersecting_edges = np.array(
+            [not isect.is_empty for isect in edge_intersects]
+        )
+
+        # find out if we have any intersection points that coincide
+        # with two edges in the same point i.e. intersections exactly at
+        # the corner of the bounding box
+        edge_intersect_coords = np.array(
+            [ei.coords[0] if has_ei else [np.nan, np.nan]
+             for has_ei, ei in zip(intersecting_edges, edge_intersects)]
+        )
+
+        _edge_intersects_coords = np.roll(edge_intersect_coords, -1, axis=0)
+        ei_dists = np.linalg.norm(
+            edge_intersect_coords - _edge_intersects_coords,
+            axis=1,
+        )
+
         ei_coincides = np.isclose(ei_dists, 0)
 
-        if (np.sum(intersecting_edges) - np.sum(ei_coincides)) != 2:
-            raise ValueError("partitioning line must intersect the exterior of the bounding box")
+        if intersecting_edges.sum() - ei_coincides.sum() != 2:
+            raise ValueError(
+                "partitioning line must intersect the exterior of the bounding box")
 
         first_intersecting_edge = np.argmax(intersecting_edges)
-        # check if this intersection is shared with the following edge, if so take that edge as the starting edge
+        # check if this intersection is shared with the following edge,
+        # if so take that edge as the starting edge
         if ei_coincides[first_intersecting_edge]:
             first_intersecting_edge += 1
-        first_intersection_point = np.array([edge_intersect_coords[first_intersecting_edge]])
 
-        last_intersecting_edge = len(intersecting_edges) - 1 - np.argmax(intersecting_edges[::-1])
-        # check if this intersection is shared with the previous edge, if so take that edge as the final edge
+        first_intersection_point = np.array(
+            [edge_intersect_coords[first_intersecting_edge]]
+        )
+
+        last_intersecting_edge = (
+            len(intersecting_edges) - 1 - np.argmax(intersecting_edges[::-1])
+        )
+        # check if this intersection is shared with the previous edge, if so
+        # take that edge as the final edge
         if ei_coincides[last_intersecting_edge-1]:
             last_intersecting_edge -= 1
-        last_intersection_point = np.array([edge_intersect_coords[last_intersecting_edge]])
+        last_intersection_point = np.array(
+            [edge_intersect_coords[last_intersecting_edge]])
 
-        # construct a list of intermediate vertices between the edge intersections, along the bounding box
-        intermediate_vertices = bbox_edges[first_intersecting_edge:last_intersecting_edge,1,:]
-        partitioning_poly_vertices = np.vstack((first_intersection_point, intermediate_vertices, last_intersection_point))
+        # construct a list of intermediate vertices between the edge
+        # intersections, along the bounding box
+        intermediate_vertices = bbox_edges[first_intersecting_edge:last_intersecting_edge, 1, :]
+        partitioning_poly_vertices = np.vstack(
+            (first_intersection_point,
+             intermediate_vertices,
+             last_intersection_point)
+        )
 
         # construct a polygon that can be used for partitioning
-        # i.e. partition the shape in stuff inside this polygon and stuff outside this polygon
-        partitioning_poly = shapely.geometry.Polygon(partitioning_poly_vertices)
+        # i.e. partition the shape in stuff inside this polygon and
+        # stuff outside this polygon
+        partitioning_poly = shapely.geometry.Polygon(
+            partitioning_poly_vertices)
 
-        partitioning_funcs = [lambda poly_in: poly_in.intersection(partitioning_poly), lambda poly_in: poly_in.difference(partitioning_poly)]
+        partitioning_funcs = [
+            lambda poly_in: poly_in.intersection(partitioning_poly),
+            lambda poly_in: poly_in.difference(partitioning_poly)
+        ]
 
         partitioned_polys = []
 
         c_polys = []
-        [c_polys.extend(c.polygonize()) for c in self.children]
+        for c in self.children:
+            c_polys += c.polygonize()
 
         for c_poly in c_polys:
             for pf in partitioning_funcs:
