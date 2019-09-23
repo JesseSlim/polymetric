@@ -214,6 +214,10 @@ class Anchors(Enum):
     LOWER_RIGHT = 2
     UPPER_RIGHT = 3
     UPPER_LEFT = 4
+    LOWER_CENTER = 5
+    RIGHT_CENTER = 6
+    UPPER_CENTER = 7
+    LEFT_CENTER = 8
 
 
 class AnchorPositioned(Positioned):
@@ -246,6 +250,18 @@ class AnchorPositioned(Positioned):
         elif anchor == Anchors.UPPER_LEFT:
             dx -= bounding_box[0]
             dy -= bounding_box[3]
+        elif anchor == Anchors.LOWER_CENTER:
+            dx -= (bounding_box[2] + bounding_box[0]) / 2.0
+            dy -= bounding_box[1]
+        elif anchor == Anchors.RIGHT_CENTER:
+            dx -= bounding_box[2]
+            dy -= (bounding_box[3] + bounding_box[1]) / 2.0
+        elif anchor == Anchors.UPPER_CENTER:
+            dx -= (bounding_box[2] + bounding_box[0]) / 2.0
+            dy -= bounding_box[3]
+        elif anchor == Anchors.LEFT_CENTER:
+            dx -= bounding_box[0]
+            dy -= (bounding_box[3] + bounding_box[1]) / 2.0
         else:
             raise ValueError("Invalid anchor selected: " + anchor)
 
