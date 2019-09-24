@@ -108,6 +108,11 @@ class Shape:
         return own_poly.bounds
 
 
+class EmptyShape(Shape):
+    def _polygonize(self):
+        return [shapely.geometry.Polygon()]
+
+
 class Polygon(Shape):
     DEFAULT_PARAMS = {
         "shell": None,
