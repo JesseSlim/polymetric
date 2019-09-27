@@ -370,10 +370,17 @@ class ParametricSweep(Shape):
 
 
 class Flattened(Shape):
+    DEFAULT_PARAMS = {
+        "rounding_precision": None
+    }
+
     def _polygonize(self):
+        rp = self.get_param("rounding_precision")
         children_polys = []
 
         for child in self.children:
+            if rp is not None:
+                child = child.apply(CoordinatesRounded, rounding_precision=rp)
             children_polys += child.polygonize()
 
         single_poly = shapely.ops.cascaded_union(children_polys)
