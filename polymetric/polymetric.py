@@ -11,7 +11,6 @@ import shapely.ops
 import shapely.affinity
 import shapely.wkt
 
-
 class Shape:
     DEFAULT_PARAMS = {}
 

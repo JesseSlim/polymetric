@@ -5,7 +5,7 @@ with open("README.md", "r") as fh:
 
 setuptools.setup(
     name="polymetric",
-    version="0.5.0",
+    version="0.6.0",
     author="Jesse Slim",
     author_email="jesse.j.slim@gmail.com",
     description="Generate complex polygon structures",
@@ -18,6 +18,7 @@ setuptools.setup(
         "Operating System :: OS Independent",
     ],
     install_requires=[
-        'shapely'
+        'shapely',
+        'numpy'
     ],
 )
