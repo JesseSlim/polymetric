@@ -11,17 +11,23 @@ import shapely.ops
 import shapely.affinity
 import shapely.wkt
 
+
 class Shape:
     DEFAULT_PARAMS = {}
+    PARAMS_EXCLUDED_FROM_REPR = []
 
     def __init__(self, children=[], name=None, **kw):
         # combine all default parameters from subclasses
         # process bottom to top (so higher classes can override params)
         subclasses = self.__class__.__mro__[::-1]
         self._params = {}
+        self._params_excluded_from_repr = set()
         for subcl in subclasses:
             if hasattr(subcl, "DEFAULT_PARAMS"):
                 self._params.update(subcl.DEFAULT_PARAMS)
+
+            if hasattr(subcl, "PARAMS_EXCLUDED_FROM_REPR"):
+                self._params_excluded_from_repr.update(subcl.PARAMS_EXCLUDED_FROM_REPR)
         # finally add any user-supplied params
         self._params.update(kw)
 
@@ -68,8 +74,16 @@ class Shape:
         new_instance.set_params(**kw)
         return new_instance
 
-    def apply(self, cls, name="", **kw):
-        return cls(children=[self], name=name, **kw)
+    def apply(self, cls, name=None, **kw):
+        if isinstance(cls, Shape):
+            # cls is an instantiated shape, copy it and apply it to self
+            new_shape = cls.clone(**kw)
+            new_shape.children = [self]
+            new_shape.name = name
+            return new_shape
+        else:
+            # cls is a class, we need to instantiate it
+            return cls(children=[self], name=name, **kw)
 
     def get_exterior_vertex_lists(self):
         polygons = self.apply(Expanded).polygonize()
@@ -106,6 +120,28 @@ class Shape:
 
         return own_poly.bounds
 
+    def __repr__(self):
+        child_reps = [repr(child) for child in self.children]
+        class_name = type(self).__name__
+
+        # # we prepend the list with an empty string, to make sure that the param string, if there are any params,
+        # # starts with a ', '. This way we can immediately insert it after the other constructor arguments
+        # params_as_arguments = ['']
+        # for k, v in self._params.items():
+        #     if k in self._params_excluded_from_repr:
+        #         continue
+        #
+        #     # let's try our best to get the defining source code in case we're dealing with a lambda
+
+        param_string = ", ".join(
+            # we prepend the list with an empty string, to make sure that the param string, if there are any params,
+            # starts with a ', '. This way we can immediately insert it after the other constructor arguments
+            [''] + [f"{k}={repr(v)}" for k, v in self._params.items() if k not in self._params_excluded_from_repr]
+        )
+
+        full_repr = f"{class_name}(children={repr(child_reps)}, name={repr(self.name)}{param_string})"
+        return full_repr
+
 
 class EmptyShape(Shape):
     def _polygonize(self):
@@ -126,6 +162,7 @@ class Transformed(Shape):
     DEFAULT_PARAMS = {
         "transformer": lambda get_param, polygon: polygon,
     }
+    PARAMS_EXCLUDED_FROM_REPR = ['transformer']
 
     def _polygonize(self):
         transformer = self.get_param("transformer", do_conversion=False)
