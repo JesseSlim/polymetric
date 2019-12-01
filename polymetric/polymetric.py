@@ -50,7 +50,7 @@ class Shape:
         result_params = {}
 
         for k in self._params:
-            result_params[k] = self.get_param(k, do_conversion=True)
+            result_params[k] = self.get_param(k, do_conversion=do_conversion)
 
         return result_params
 
