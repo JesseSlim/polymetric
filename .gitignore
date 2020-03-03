@@ -3,6 +3,7 @@ test_generated_files
 *.gds
 *.dxf
 .idea
+polymetric_scratchpad.ipynb
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
