@@ -121,7 +121,6 @@ class Shape:
         return own_poly.bounds
 
     def __repr__(self):
-        child_reps = [repr(child) for child in self.children]
         class_name = type(self).__name__
 
         # # we prepend the list with an empty string, to make sure that the param string, if there are any params,
@@ -139,7 +138,7 @@ class Shape:
             [''] + [f"{k}={repr(v)}" for k, v in self._params.items() if k not in self._params_excluded_from_repr]
         )
 
-        full_repr = f"{class_name}(children={repr(child_reps)}, name={repr(self.name)}{param_string})"
+        full_repr = f"{class_name}(children={repr(self.children)}, name={repr(self.name)}{param_string})"
         return full_repr
 
 
